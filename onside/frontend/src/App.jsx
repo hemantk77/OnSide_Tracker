@@ -34,6 +34,9 @@ import {
   BarChart3
 } from 'lucide-react';
 
+// --- API Configuration ---
+const API_URL = 'http://127.0.0.1:8000'; 
+
 // --- Theme Constants ---
 const THEME = {
   light: {
@@ -110,16 +113,6 @@ const EMPTY_USER_DATA = {
   transactions: [],
   subscriptions: [],
   goals: []
-};
-
-// --- Mock Persistence ---
-const loadUsers = () => {
-  const stored = localStorage.getItem('onside_users');
-  return stored ? JSON.parse(stored) : {};
-};
-
-const saveUsers = (users) => {
-  localStorage.setItem('onside_users', JSON.stringify(users));
 };
 
 // --- Reusable Components ---
@@ -201,8 +194,8 @@ const ChartModal = ({ isOpen, onClose, transactions, currency, type }) => {
 
   // --- BAR CHART (Balance) ---
   if (type === 'balance') {
-    const income = monthlyTransactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
-    const expense = monthlyTransactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
+    const income = monthlyTransactions.filter(t => t.type === 'income').reduce((acc, t) => acc + parseFloat(t.amount), 0);
+    const expense = monthlyTransactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + parseFloat(t.amount), 0);
     
     // Add 10% buffer to max for visual spacing, default min 100
     const rawMax = Math.max(income, expense, 100);
@@ -273,7 +266,7 @@ const ChartModal = ({ isOpen, onClose, transactions, currency, type }) => {
   
   // Group by category
   const categories = relevantTransactions.reduce((acc, t) => {
-    acc[t.category] = (acc[t.category] || 0) + t.amount;
+    acc[t.category] = (acc[t.category] || 0) + parseFloat(t.amount);
     return acc;
   }, {});
 
@@ -427,7 +420,7 @@ const BudgetCard = ({ transactions, limit, onUpdateBudget, currency }) => {
   // 1. Calculate total expenses
   const totalExpense = transactions
     .filter(t => t.type === 'expense')
-    .reduce((acc, curr) => acc + curr.amount, 0);
+    .reduce((acc, curr) => acc + parseFloat(curr.amount), 0);
 
   // 2. Calculate percentage
   const percent = Math.min((totalExpense / limit) * 100, 100);
@@ -468,13 +461,13 @@ const BudgetCard = ({ transactions, limit, onUpdateBudget, currency }) => {
                 onClick={() => setIsEditing(true)}
                 title="Click to edit budget"
               >
-                <p className="text-xs text-muted group-hover:text-primary transition-colors">Limit: {symbol}{limit.toLocaleString()}</p>
+                <p className="text-xs text-muted group-hover:text-primary transition-colors">Limit: {symbol}{parseFloat(limit).toLocaleString()}</p>
                 <Edit2 size={12} className="text-muted opacity-0 group-hover:opacity-100 transition-opacity -ml-1" />
               </div>
             )}
         </div>
         <span className={`font-bold ${isWarning ? 'text-red-500' : 'text-green-500'}`}>
-            {symbol}{totalExpense.toFixed(2)} / {symbol}{limit.toLocaleString()}
+            {symbol}{totalExpense.toFixed(2)} / {symbol}{parseFloat(limit).toLocaleString()}
         </span>
       </div>
       
@@ -588,10 +581,10 @@ const Profile = ({ user, onUpdateProfile, onLogout, darkMode }) => {
       <div className="bg-card p-6 rounded-[24px] shadow-sm border border-border">
         <div className="flex items-center gap-4 mb-8">
            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold">
-             {user.name.charAt(0)}
+             {user.name ? user.name.charAt(0) : user.username.charAt(0)}
            </div>
            <div>
-             <h3 className="text-xl font-bold text-text">{user.name}</h3>
+             <h3 className="text-xl font-bold text-text">{user.name || user.username}</h3>
              <p className="text-muted">@{user.username}</p>
            </div>
         </div>
@@ -623,9 +616,9 @@ const Profile = ({ user, onUpdateProfile, onLogout, darkMode }) => {
 };
 
 const Dashboard = ({ data, onNavigate, onEditTransaction, onDeleteTransaction, onAddGoal, onEditGoal, onDeleteGoal, onUpdateBudget, darkMode }) => {
-  const [chartType, setChartType] = useState(null); // 'balance', 'income', 'expense'
-  const totalIncome = data.transactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + curr.amount, 0);
-  const totalExpense = data.transactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
+  const [chartType, setChartType] = useState(null);
+  const totalIncome = data.transactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + parseFloat(curr.amount), 0);
+  const totalExpense = data.transactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + parseFloat(curr.amount), 0);
   const savings = totalIncome - totalExpense;
   const symbol = CURRENCY_SYMBOLS[data.user.currency] || '$';
 
@@ -633,7 +626,7 @@ const Dashboard = ({ data, onNavigate, onEditTransaction, onDeleteTransaction, o
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold font-heading text-text">Hello, {data.user.name} 👋</h1>
+          <h1 className="text-2xl md:text-3xl font-bold font-heading text-text">Hello, {data.user.name || data.user.username} 👋</h1>
           <p className="text-muted">Financial Overview</p>
         </div>
       </div>
@@ -720,7 +713,7 @@ const Dashboard = ({ data, onNavigate, onEditTransaction, onDeleteTransaction, o
                   <div className={`p-3 rounded-full ${t.type === 'income' ? 'bg-green-100 dark:bg-green-900/20 text-green-600' : 'bg-red-100 dark:bg-red-900/20 text-red-500'}`}>{t.type === 'income' ? <TrendingUp size={20}/> : <TrendingDown size={20}/>}</div>
                   <div><h4 className="font-semibold text-text">{t.title}</h4><p className="text-xs text-muted">{t.date} • {t.category}</p></div>
                 </div>
-                <span className={`font-bold ${t.type === 'income' ? 'text-green-500' : 'text-text'}`}>{t.type === 'income' ? '+' : '-'}{symbol}{t.amount.toFixed(2)}</span>
+                <span className={`font-bold ${t.type === 'income' ? 'text-green-500' : 'text-text'}`}>{t.type === 'income' ? '+' : '-'}{symbol}{parseFloat(t.amount).toFixed(2)}</span>
               </Card>
             ))}
           </div>
@@ -857,7 +850,7 @@ const Transactions = ({ transactions, onAdd, onEdit, onDelete, darkMode, currenc
               <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl ${t.type === 'income' ? 'bg-green-100 dark:bg-green-900/20' : 'bg-red-100 dark:bg-red-900/20'}`}>{t.type === 'income' ? '💰' : '🛒'}</div>
               <div><h4 className="font-semibold text-text text-lg">{t.title}</h4><p className="text-sm text-muted">{t.date} • {t.category}</p></div>
             </div>
-            <div className="text-right"><p className={`font-bold text-lg ${t.type === 'income' ? 'text-green-500' : 'text-text'}`}>{t.type === 'income' ? '+' : '-'}{symbol}{t.amount.toFixed(2)}</p></div>
+            <div className="text-right"><p className={`font-bold text-lg ${t.type === 'income' ? 'text-green-500' : 'text-text'}`}>{t.type === 'income' ? '+' : '-'}{symbol}{parseFloat(t.amount).toFixed(2)}</p></div>
           </Card>
         ))}
       </div>
@@ -885,12 +878,12 @@ const Subscriptions = ({ subscriptions, onAdd, onEdit, onDelete, darkMode, curre
                 sub.logo || (sub.name ? sub.name.charAt(0) : '?')
               )}
             </div>
-            <span className="text-lg font-bold text-text">{symbol}{sub.amount}</span>
+            <span className="text-lg font-bold text-text">{symbol}{parseFloat(sub.amount)}</span>
           </div>
           <div className="relative z-10">
             <h3 className="font-bold text-lg text-text mb-1">{sub.name}</h3>
             <p className="text-sm text-muted mb-4">{sub.cycle}</p>
-            <div className="flex items-center gap-2 text-xs font-medium text-orange-500 bg-orange-100 dark:bg-orange-900/20 w-fit px-2 py-1 rounded-md"><Target size={12} />Next: {sub.nextDate}</div>
+            <div className="flex items-center gap-2 text-xs font-medium text-orange-500 bg-orange-100 dark:bg-orange-900/20 w-fit px-2 py-1 rounded-md"><Target size={12} />Next: {sub.next_date}</div>
           </div>
         </Card>
       ))}
@@ -942,41 +935,66 @@ const OnSideApp = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [allUsers, setAllUsers] = useState({});
+  const [token, setToken] = useState(localStorage.getItem('token') || null);
   
   // Modal States
   const [editingItem, setEditingItem] = useState(null);
   const [modalType, setModalType] = useState(null); // 'transaction', 'goal', 'subscription'
 
-  useEffect(() => {
-    setAllUsers(loadUsers());
-  }, []);
+  // --- API Functions ---
+  const fetchUserData = async () => {
+    try {
+      const headers = { 'Authorization': `Token ${token}` };
+      const [userRes, txRes, subRes, goalRes] = await Promise.all([
+        fetch(`${API_URL}/api/users/me/`, { headers }),
+        fetch(`${API_URL}/api/transactions/`, { headers }),
+        fetch(`${API_URL}/api/subscriptions/`, { headers }),
+        fetch(`${API_URL}/api/goals/`, { headers })
+      ]);
 
-  const handleRegister = (details) => {
-    if (allUsers[details.username]) {
-      alert("Username already exists");
-      return;
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        const txs = await txRes.json();
+        const subs = await subRes.json();
+        const goals = await goalRes.json();
+        
+        setCurrentUser({
+          user: { ...userData, ...userData.profile }, // Merge User and Profile
+          transactions: txs,
+          subscriptions: subs,
+          goals: goals
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch data", error);
     }
-    const newUser = {
-      ...EMPTY_USER_DATA,
-      user: { ...EMPTY_USER_DATA.user, ...details }
-    };
-    const updatedUsers = { ...allUsers, [details.username]: newUser };
-    setAllUsers(updatedUsers);
-    saveUsers(updatedUsers);
-    setCurrentUser(newUser);
   };
 
-  const handleLogin = (username, password) => {
-    const user = allUsers[username];
-    if (user && user.user.password === password) {
-      setCurrentUser(user);
-    } else {
-      alert("Invalid credentials");
-    }
+  useEffect(() => {
+    if (token) fetchUserData();
+  }, [token]);
+
+  const handleLogin = async (username, password) => {
+    try {
+      const res = await fetch(`${API_URL}/api-token-auth/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.token) {
+        setToken(data.token);
+        localStorage.setItem('token', data.token);
+      } else {
+        alert("Login failed");
+      }
+    } catch (e) { alert("Connection Error"); }
   };
 
   const handleLogout = () => {
+    setToken(null);
     setCurrentUser(null);
+    localStorage.removeItem('token');
     setActiveTab('dashboard');
   };
 
@@ -992,7 +1010,7 @@ const OnSideApp = () => {
     saveUsers(updatedAllUsers);
   };
 
-  const handleUpdateData = (type, action, item) => {
+  const handleUpdateData = async (type, action, item) => {
     const newData = { ...currentUser };
     if (action === 'add') {
       newData[type] = [item, ...newData[type]];
@@ -1050,13 +1068,37 @@ const OnSideApp = () => {
       newData[type] = newData[type].filter(i => i.id !== item.id);
     }
     
-    // Persist
-    const updatedUsers = { ...allUsers, [currentUser.user.username]: newData };
-    setAllUsers(updatedUsers);
-    saveUsers(updatedUsers);
-    setCurrentUser(newData);
+    // Determine Endpoint
+    const method = action === 'add' ? 'POST' : action === 'edit' ? 'PUT' : 'DELETE';
+    const url = action === 'delete' ? `${API_URL}/api/${type}/${item.id}/` : (action === 'edit' ? `${API_URL}/api/${type}/${item.id}/` : `${API_URL}/api/${type}/`);
+    
+    try {
+      const res = await fetch(url, {
+        method: method,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${token}`
+        },
+        body: action !== 'delete' ? JSON.stringify(item) : null
+      });
+      
+      if (res.ok) fetchUserData(); // Refresh data
+    } catch (e) { console.error(e); }
+    
     setEditingItem(null);
     setModalType(null);
+  };
+
+  const handleUpdateProfile = async (data) => {
+     // Update user profile via API
+     try {
+       await fetch(`${API_URL}/api/users/${currentUser.user.id}/`, {
+         method: 'PATCH',
+         headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
+         body: JSON.stringify(data)
+       });
+       fetchUserData();
+     } catch(e) {}
   };
 
   const currentTheme = darkMode ? THEME.dark : THEME.light;
@@ -1068,9 +1110,9 @@ const OnSideApp = () => {
     const isEdit = !!editingItem;
     // Default form states
     let initialValues = {};
-    if (modalType === 'transaction') initialValues = { title: '', amount: '', type: 'expense', category: 'General', date: new Date().toISOString().split('T')[0] };
-    if (modalType === 'subscription') initialValues = { name: '', amount: '', cycle: 'Monthly', nextDate: '', logo: '?' };
-    if (modalType === 'goal') initialValues = { name: '', current: 0, target: 0, icon: '🎯' };
+    if (modalType === 'transactions') initialValues = { title: '', amount: '', type: 'expense', category: 'General', date: new Date().toISOString().split('T')[0] };
+    if (modalType === 'subscriptions') initialValues = { name: '', amount: '', cycle: 'Monthly', next_date: '', logo: '' };
+    if (modalType === 'goals') initialValues = { name: '', current_amount: 0, target_amount: 0, icon: '🎯' };
 
     const values = isEdit ? editingItem : initialValues;
     
@@ -1085,15 +1127,15 @@ const OnSideApp = () => {
       
       const item = { ...values, ...data, id: values.id || Date.now() };
       handleUpdateData(
-        modalType === 'transaction' ? 'transactions' : modalType === 'subscription' ? 'subscriptions' : 'goals',
-        isEdit ? 'edit' : 'add',
+        modalType, 
+        isEdit ? 'edit' : 'add', 
         item
       );
     };
 
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
-        {modalType === 'transaction' && (
+        {modalType === 'transactions' && (
           <>
             <Input label="Title" name="title" defaultValue={values.title} required />
             <Input label="Amount" type="number" name="amount" defaultValue={values.amount} required step="0.01" />
@@ -1108,20 +1150,20 @@ const OnSideApp = () => {
             </div>
           </>
         )}
-        {modalType === 'subscription' && (
+        {modalType === 'subscriptions' && (
           <>
               <Input label="Service Name" name="name" defaultValue={values.name} required />
               <Input label="Amount" type="number" name="amount" defaultValue={values.amount} required step="0.01" />
               <Input label="Billing Cycle" name="cycle" defaultValue={values.cycle} placeholder="Monthly" required />
-              <Input label="Next Date" type="date" name="nextDate" defaultValue={values.nextDate} required />
+              <Input label="Next Date" type="date" name="next_date" defaultValue={values.next_date || values.nextDate} required />
               <Input label="Logo URL" name="logo" defaultValue={values.logo} placeholder="https://example.com/logo.png" />
           </>
         )}
-        {modalType === 'goal' && (
+        {modalType === 'goals' && (
           <>
             <Input label="Goal Name" name="name" defaultValue={values.name} required />
-            <Input label="Target Amount" type="number" name="target" defaultValue={values.target} required step="0.01" />
-            <Input label="Current Savings" type="number" name="current" defaultValue={values.current} required step="0.01" />
+            <Input label="Target Amount" type="number" name="target_amount" defaultValue={values.target_amount || values.targetAmount} required step="0.01" />
+            <Input label="Current Savings" type="number" name="current_amount" defaultValue={values.current_amount || values.currentAmount} required step="0.01" />
             <Input label="Icon (Emoji)" name="icon" defaultValue={values.icon} maxLength={2} />
           </>
         )}
@@ -1200,35 +1242,29 @@ const OnSideApp = () => {
                 {activeTab === 'dashboard' && <Dashboard 
                   data={currentUser} 
                   onNavigate={setActiveTab} 
-                  onEditTransaction={(t) => { setEditingItem(t); setModalType('transaction'); }}
-                  onAddGoal={() => { setEditingItem(null); setModalType('goal'); }}
-                  onEditGoal={(g) => { setEditingItem(g); setModalType('goal'); }}
-                  onUpdateBudget={handleUpdateBudget}
+                  onEditTransaction={(t) => { setEditingItem(t); setModalType('transactions'); }}
+                  onAddGoal={() => { setEditingItem(null); setModalType('goals'); }}
+                  onEditGoal={(g) => { setEditingItem(g); setModalType('goals'); }}
+                  onUpdateBudget={(val) => handleUpdateProfile({ profile: { budget_limit: val } })}
                   darkMode={darkMode}
                 />}
                 {activeTab === 'transactions' && <Transactions 
                   transactions={currentUser.transactions} 
-                  onAdd={() => { setEditingItem(null); setModalType('transaction'); }}
-                  onEdit={(t) => { setEditingItem(t); setModalType('transaction'); }}
+                  onAdd={() => { setEditingItem(null); setModalType('transactions'); }}
+                  onEdit={(t) => { setEditingItem(t); setModalType('transactions'); }}
                   darkMode={darkMode}
                   currency={currentUser.user.currency}
                 />}
                 {activeTab === 'subscriptions' && <Subscriptions 
                   subscriptions={currentUser.subscriptions} 
-                  onAdd={() => { setEditingItem(null); setModalType('subscription'); }}
-                  onEdit={(s) => { setEditingItem(s); setModalType('subscription'); }}
+                  onAdd={() => { setEditingItem(null); setModalType('subscriptions'); }}
+                  onEdit={(s) => { setEditingItem(s); setModalType('subscriptions'); }}
                   darkMode={darkMode}
                   currency={currentUser.user.currency}
                 />}
                 {activeTab === 'profile' && <Profile 
                    user={currentUser.user} 
-                   onUpdateProfile={(data) => {
-                     const updated = { ...currentUser, user: data };
-                     setCurrentUser(updated);
-                     const all = { ...allUsers, [data.username]: updated };
-                     setAllUsers(all);
-                     saveUsers(all);
-                   }}
+                   onUpdateProfile={(data) => handleUpdateProfile(data)}
                    onLogout={handleLogout}
                    darkMode={darkMode}
                 />}
@@ -1238,7 +1274,7 @@ const OnSideApp = () => {
             <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border h-20 flex items-center justify-around px-2 z-30 pb-2">
               <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 p-2 rounded-lg`} style={{ color: activeTab === 'dashboard' ? COLORS.primary : currentTheme.muted }}><LayoutDashboard size={24} /><span className="text-[10px] font-medium">Home</span></button>
               <button onClick={() => setActiveTab('transactions')} className={`flex flex-col items-center gap-1 p-2 rounded-lg`} style={{ color: activeTab === 'transactions' ? COLORS.primary : currentTheme.muted }}><CreditCard size={24} /><span className="text-[10px] font-medium">Txns</span></button>
-              <button onClick={() => { setEditingItem(null); setModalType('transaction'); }} className="flex flex-col items-center justify-center -mt-6"><div className="w-14 h-14 bg-primary rounded-full flex items-center justify-center text-white shadow-lg shadow-primary/40"><Plus size={28} /></div></button>
+              <button onClick={() => { setEditingItem(null); setModalType('transactions'); }} className="flex flex-col items-center justify-center -mt-6"><div className="w-14 h-14 bg-primary rounded-full flex items-center justify-center text-white shadow-lg shadow-primary/40"><Plus size={28} /></div></button>
               <button onClick={() => setActiveTab('subscriptions')} className={`flex flex-col items-center gap-1 p-2 rounded-lg`} style={{ color: activeTab === 'subscriptions' ? COLORS.primary : currentTheme.muted }}><Wallet size={24} /><span className="text-[10px] font-medium">Subs</span></button>
               <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 p-2 rounded-lg`} style={{ color: activeTab === 'profile' ? COLORS.primary : currentTheme.muted }}><User size={24} /><span className="text-[10px] font-medium">Me</span></button>
             </nav>
@@ -1252,7 +1288,7 @@ const OnSideApp = () => {
           isOpen={!!modalType} 
           onClose={() => { setModalType(null); setEditingItem(null); }}
           title={`${editingItem ? 'Edit' : 'Add New'} ${modalType ? modalType.charAt(0).toUpperCase() + modalType.slice(1) : ''}`}
-          onDelete={editingItem ? () => handleUpdateData(modalType === 'transaction' ? 'transactions' : modalType === 'subscription' ? 'subscriptions' : 'goals', 'delete', editingItem) : null}
+          onDelete={editingItem ? () => handleUpdateData(modalType, 'delete', editingItem) : null}
           darkMode={darkMode}
         >
           {renderModalContent()}
