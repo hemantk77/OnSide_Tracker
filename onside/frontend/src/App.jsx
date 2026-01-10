@@ -35,6 +35,8 @@ import {
 } from 'lucide-react';
 
 // --- API Configuration ---
+// For local development and preview. 
+// When deploying to Vercel with Vite, you would typically use: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 const API_URL = 'http://127.0.0.1:8000'; 
 
 // --- Theme Constants ---
@@ -999,75 +1001,22 @@ const OnSideApp = () => {
   };
 
   const handleUpdateBudget = (newLimit) => {
-    const updatedUser = { 
-      ...currentUser, 
-      user: { ...currentUser.user, budgetLimit: newLimit } 
-    };
-    setCurrentUser(updatedUser);
-    
-    const updatedAllUsers = { ...allUsers, [currentUser.user.username]: updatedUser };
-    setAllUsers(updatedAllUsers);
-    saveUsers(updatedAllUsers);
+    handleUpdateProfile({ profile: { budget_limit: newLimit } });
+  };
+
+  const handleUpdateProfile = async (data) => {
+     // Update user profile via API
+     try {
+       await fetch(`${API_URL}/api/users/${currentUser.user.id}/`, {
+         method: 'PATCH',
+         headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
+         body: JSON.stringify(data)
+       });
+       fetchUserData();
+     } catch(e) {}
   };
 
   const handleUpdateData = async (type, action, item) => {
-    const newData = { ...currentUser };
-    if (action === 'add') {
-      newData[type] = [item, ...newData[type]];
-      
-      // --- GAMIFICATION LOGIC ---
-      let earnedXp = 0;
-
-      // 1 Unit of Currency = 1 XP for Transactions and Subscriptions
-      if (type === 'transactions' || type === 'subscriptions') {
-        earnedXp = Math.floor(Math.abs(item.amount || 0));
-      } else if (type === 'goals') {
-        // Keep fixed reward for setting a goal since it doesn't represent immediate spending
-        earnedXp = 150; 
-      }
-      
-      if (earnedXp > 0) {
-        let { xp, level, nextLevelXp } = newData.user;
-        xp += earnedXp;
-        
-        let rewardVoucher = false;
-
-        // Level Up Check
-        while (xp >= nextLevelXp) {
-          xp -= nextLevelXp;
-          level += 1;
-          
-          if (level > 10) {
-            level = 1;
-            nextLevelXp = 1000;
-            rewardVoucher = true;
-          } else {
-            nextLevelXp = Math.floor(nextLevelXp * 1.2); // Increase difficulty by 20%
-          }
-        }
-        
-        newData.user = { ...newData.user, xp, level, nextLevelXp };
-
-        if (rewardVoucher) {
-           const voucherTxn = {
-             id: Date.now() + Math.random(), 
-             title: "Amazon Voucher (Reward)",
-             amount: 100,
-             type: "income",
-             category: "Gift",
-             date: new Date().toISOString().split('T')[0]
-           };
-           newData.transactions = [voucherTxn, ...newData.transactions];
-        }
-      }
-      // ---------------------------
-
-    } else if (action === 'edit') {
-      newData[type] = newData[type].map(i => i.id === item.id ? item : i);
-    } else if (action === 'delete') {
-      newData[type] = newData[type].filter(i => i.id !== item.id);
-    }
-    
     // Determine Endpoint
     const method = action === 'add' ? 'POST' : action === 'edit' ? 'PUT' : 'DELETE';
     const url = action === 'delete' ? `${API_URL}/api/${type}/${item.id}/` : (action === 'edit' ? `${API_URL}/api/${type}/${item.id}/` : `${API_URL}/api/${type}/`);
@@ -1082,23 +1031,73 @@ const OnSideApp = () => {
         body: action !== 'delete' ? JSON.stringify(item) : null
       });
       
-      if (res.ok) fetchUserData(); // Refresh data
+      if (res.ok) {
+        // --- GAMIFICATION LOGIC (Calculated Client-side, Saved to Server) ---
+        if (action === 'add') {
+          let earnedXp = 0;
+          if (type === 'transactions' || type === 'subscriptions') {
+            earnedXp = Math.floor(Math.abs(item.amount || 0));
+          } else if (type === 'goals') {
+            earnedXp = 150; 
+          }
+
+          if (earnedXp > 0) {
+            let { xp, level, nextLevelXp } = currentUser.user;
+            // Handle backend variable naming differences (snake_case vs camelCase) if needed
+            // Assuming the serializer sends next_level_xp as nextLevelXp or we map it. 
+            // In the fetchUserData I spread profile, so it depends on serializer.
+            // Let's assume standardized keys for now or fallback.
+            let currentXp = xp || 0;
+            let currentLevel = level || 1;
+            let currentNextXp = nextLevelXp || currentUser.user.next_level_xp || 1000;
+
+            currentXp += earnedXp;
+            let rewardVoucher = false;
+
+            while (currentXp >= currentNextXp) {
+              currentXp -= currentNextXp;
+              currentLevel += 1;
+              if (currentLevel > 10) {
+                currentLevel = 1;
+                currentNextXp = 1000;
+                rewardVoucher = true;
+              } else {
+                currentNextXp = Math.floor(currentNextXp * 1.2);
+              }
+            }
+
+            // Update Profile on Server
+            await handleUpdateProfile({
+                profile: {
+                    xp: currentXp,
+                    level: currentLevel,
+                    next_level_xp: currentNextXp
+                }
+            });
+
+            // If Voucher Triggered
+            if (rewardVoucher) {
+                await fetch(`${API_URL}/api/transactions/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
+                    body: JSON.stringify({
+                        title: "Amazon Voucher (Reward)",
+                        amount: 100,
+                        type: "income",
+                        category: "Gift",
+                        date: new Date().toISOString().split('T')[0]
+                    })
+                });
+            }
+          }
+        }
+        
+        fetchUserData(); // Refresh all data
+      }
     } catch (e) { console.error(e); }
     
     setEditingItem(null);
     setModalType(null);
-  };
-
-  const handleUpdateProfile = async (data) => {
-     // Update user profile via API
-     try {
-       await fetch(`${API_URL}/api/users/${currentUser.user.id}/`, {
-         method: 'PATCH',
-         headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
-         body: JSON.stringify(data)
-       });
-       fetchUserData();
-     } catch(e) {}
   };
 
   const currentTheme = darkMode ? THEME.dark : THEME.light;
@@ -1125,7 +1124,7 @@ const OnSideApp = () => {
       if (data.current) data.current = parseFloat(data.current);
       if (data.target) data.target = parseFloat(data.target);
       
-      const item = { ...values, ...data, id: values.id || Date.now() };
+      const item = { ...values, ...data, id: values.id }; // remove Date.now() since backend handles ID
       handleUpdateData(
         modalType, 
         isEdit ? 'edit' : 'add', 
@@ -1245,7 +1244,7 @@ const OnSideApp = () => {
                   onEditTransaction={(t) => { setEditingItem(t); setModalType('transactions'); }}
                   onAddGoal={() => { setEditingItem(null); setModalType('goals'); }}
                   onEditGoal={(g) => { setEditingItem(g); setModalType('goals'); }}
-                  onUpdateBudget={(val) => handleUpdateProfile({ profile: { budget_limit: val } })}
+                  onUpdateBudget={handleUpdateBudget}
                   darkMode={darkMode}
                 />}
                 {activeTab === 'transactions' && <Transactions 
