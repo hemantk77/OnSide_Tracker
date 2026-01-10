@@ -9,22 +9,31 @@ The project uses a **Django backend** for APIs and data handling, and a **modern
 ## 📂 Project Structure
 
 OnSide_Tracker/
-│
 ├── onside/
-│ ├── backend/ # Django backend
-│ │ ├── manage.py
-│ │ ├── requirements.txt
-│ │ └── db.sqlite3
-│ │
-│ ├── frontend/ # Frontend (Vite + Tailwind)
-│ │ ├── index.html
-│ │ ├── package.json
-│ │ ├── vite.config.js
-│ │ └── tailwind.config.js
-│
-├── onside_logo.png # Application logo
+│   ├── backend/
+│   │   ├── manage.py
+│   │   ├── requirements.txt
+│   │   ├── db.sqlite3
+│   │   ├── backend/
+│   │   │   ├── __init__.py
+│   │   │   ├── asgi.py
+│   │   │   ├── settings.py
+│   │   │   ├── urls.py
+│   │   │   └── wsgi.py
+│   │   └── venv/
+│   │
+│   ├── frontend/
+│   │   ├── index.html
+│   │   ├── package.json
+│   │   ├── vite.config.js
+│   │   ├── tailwind.config.js
+│   │   ├── postcss.config.js
+│   │   └── src/
+│   │       ├── main.js
+│   │       └── styles.css
+│   │
+├── onside_logo.png
 └── README.md
-
 
 ---
 
